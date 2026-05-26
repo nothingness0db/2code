@@ -39,6 +39,11 @@ import {
 import { queryKeys, queryNamespaces } from "@/shared/lib/queryKeys";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+// Windows process creation is 5-10x slower than macOS/Linux. Polling git
+// every second creates 2+ subprocesses per tick, which is expensive on Windows.
+// Use a longer interval there while keeping the snappy 1s on macOS.
+const isWindows = navigator.platform.toUpperCase().includes("WIN");
+const GIT_POLL_INTERVAL_MS = isWindows ? 4_000 : GIT_STATUS_REFRESH_INTERVAL_MS;
 interface UseProjectAvatarOptions {
 	enabled?: boolean;
 }
@@ -62,8 +67,8 @@ export function useGitBranch(folder: string, enabled = true) {
 		queryKey: queryKeys.git.branch(folder),
 		queryFn: () => getGitBranch({ folder }),
 		enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_POLL_INTERVAL_MS : false,
 	});
 }
 
@@ -306,8 +311,8 @@ export function useFileTreeGitStatus(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.status(profileId),
 		queryFn: () => getFileTreeGitStatus({ profileId }),
 		enabled: !!profileId && enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_POLL_INTERVAL_MS : false,
 	});
 }
 
