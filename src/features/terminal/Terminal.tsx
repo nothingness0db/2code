@@ -37,6 +37,29 @@ interface TerminalProps {
 	isActive: boolean;
 }
 
+/** Map known shell executable paths to friendly display names. */
+function friendlyShellTitle(title: string): string {
+	// Extract basename from the first token (handles "C:\...\pwsh.exe" and "pwsh.exe")
+	const firstToken = title.split(/\s/)[0];
+	const basename = firstToken.split(/[\\/]/).pop()?.toLowerCase() ?? "";
+
+	const map: Record<string, string> = {
+		"pwsh.exe": "PowerShell 7",
+		"powershell.exe": "Windows PowerShell",
+		"cmd.exe": "Command Prompt",
+		"wsl.exe": "WSL",
+	};
+
+	if (map[basename]) return map[basename];
+
+	// Git Bash: bash.exe in a Git installation path
+	if (basename === "bash.exe" && title.toLowerCase().includes("git")) {
+		return "Git Bash";
+	}
+
+	return title;
+}
+
 export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
@@ -371,9 +394,10 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			});
 
 			term.onTitleChange((title) => {
+				const friendly = friendlyShellTitle(title);
 				useTerminalStore
 					.getState()
-					.updateTabTitle(profileId, sessionId, title);
+					.updateTabTitle(profileId, sessionId, friendly);
 			});
 
 			const resizeObserver = new ResizeObserver((entries) => {
