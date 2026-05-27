@@ -19,13 +19,15 @@ fn push_shell(
 	command: impl Into<String>,
 	default_command: &str,
 	integration: bool,
+	label: Option<&str>,
 ) {
 	let command = command.into();
 	if command.trim().is_empty() || !seen.insert(command.clone()) {
 		return;
 	}
+	let label = label.unwrap_or(&command).to_string();
 	shells.push(AvailableShell {
-		label: command.clone(),
+		label,
 		is_default: command == default_command,
 		supports_integration: integration,
 		command,
@@ -54,7 +56,7 @@ fn push_existing_shell(
 		return;
 	}
 	if command_exists(command) {
-		push_shell(shells, seen, command, default_command, true);
+		push_shell(shells, seen, command, default_command, true, None);
 	}
 }
 
@@ -79,7 +81,14 @@ fn load_unix_shells(default_command: &str) -> Vec<AvailableShell> {
 	let mut shells = Vec::new();
 	let mut seen = HashSet::new();
 
-	push_shell(&mut shells, &mut seen, default_command, default_command, true);
+	push_shell(
+		&mut shells,
+		&mut seen,
+		default_command,
+		default_command,
+		true,
+		None,
+	);
 
 	if let Ok(contents) = std::fs::read_to_string("/etc/shells") {
 		for line in contents.lines() {
@@ -165,6 +174,46 @@ fn find_on_path(exe: &str) -> Option<String> {
 		.filter(|s| !s.is_empty())
 }
 
+/// Detect installed WSL distributions by running `wsl -l -q`.
+/// Returns a list of distro names (e.g. ["Ubuntu", "Debian"]).
+/// `wsl -l -q` outputs UTF-16LE on Windows, so we decode accordingly.
+#[cfg(windows)]
+fn detect_wsl_distros() -> Vec<String> {
+	let output = match silent_command("wsl").args(["-l", "-q"]).output() {
+		Ok(o) if o.status.success() => o,
+		_ => return Vec::new(),
+	};
+
+	// wsl -l -q outputs UTF-16LE (little-endian with BOM)
+	let stdout = &output.stdout;
+	if stdout.len() < 2 {
+		return Vec::new();
+	}
+
+	// Try UTF-16LE decoding (skip BOM if present)
+	let words: Vec<u16> = if stdout.len() >= 2
+		&& stdout[0] == 0xFF
+		&& stdout[1] == 0xFE
+	{
+		// Has BOM — skip first 2 bytes
+		stdout[2..]
+			.chunks_exact(2)
+			.map(|c| u16::from_le_bytes([c[0], c[1]]))
+			.collect()
+	} else {
+		stdout
+			.chunks_exact(2)
+			.map(|c| u16::from_le_bytes([c[0], c[1]]))
+			.collect()
+	};
+
+	let text = String::from_utf16_lossy(&words);
+	text.lines()
+		.map(|l| l.trim().to_string())
+		.filter(|l| !l.is_empty())
+		.collect()
+}
+
 #[cfg(windows)]
 fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 	let mut shells = Vec::new();
@@ -178,6 +227,7 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 			format!("{} -NoLogo -NoProfile", pwsh_path),
 			default_command,
 			true,
+			Some("PowerShell 7"),
 		);
 	}
 
@@ -188,10 +238,18 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 		"powershell.exe -NoLogo -NoProfile",
 		default_command,
 		true,
+		Some("Windows PowerShell"),
 	);
 
 	// 3. cmd.exe — no shell integration
-	push_shell(&mut shells, &mut seen, "cmd.exe", default_command, false);
+	push_shell(
+		&mut shells,
+		&mut seen,
+		"cmd.exe",
+		default_command,
+		false,
+		Some("Command Prompt"),
+	);
 
 	// 4. Git Bash — check well-known paths, then PATH
 	let git_bash_candidates = [
@@ -200,21 +258,59 @@ fn load_windows_shells(default_command: &str) -> Vec<AvailableShell> {
 	];
 	for path in &git_bash_candidates {
 		if Path::new(path).exists() {
-			push_shell(&mut shells, &mut seen, *path, default_command, true);
+			push_shell(
+				&mut shells,
+				&mut seen,
+				*path,
+				default_command,
+				true,
+				Some("Git Bash"),
+			);
 		}
 	}
 	if !seen.iter().any(|s| s.contains("Git")) {
 		if let Some(bash) = find_on_path("bash.exe") {
 			if bash.to_lowercase().contains("git") {
-				push_shell(&mut shells, &mut seen, bash, default_command, true);
+				push_shell(
+					&mut shells,
+					&mut seen,
+					bash,
+					default_command,
+					true,
+					Some("Git Bash"),
+				);
 			}
 		}
 	}
 
-	// 5. WSL — no shell integration (runs Linux inside)
-	let wsl = r"C:\Windows\System32\wsl.exe";
-	if Path::new(wsl).exists() {
-		push_shell(&mut shells, &mut seen, wsl, default_command, false);
+	// 5. WSL — detect installed distros, each as a separate entry
+	let distros = detect_wsl_distros();
+	if distros.is_empty() {
+		// No distros detected or wsl not available — still show raw wsl.exe if it exists
+		let wsl = r"C:\Windows\System32\wsl.exe";
+		if Path::new(wsl).exists() {
+			push_shell(
+				&mut shells,
+				&mut seen,
+				wsl,
+				default_command,
+				false,
+				Some("WSL"),
+			);
+		}
+	} else {
+		for distro in &distros {
+			let command = format!("wsl.exe -d {}", distro);
+			let label = format!("{} (WSL)", distro);
+			push_shell(
+				&mut shells,
+				&mut seen,
+				command,
+				default_command,
+				false,
+				Some(&label),
+			);
+		}
 	}
 
 	shells
@@ -247,6 +343,7 @@ pub fn load_available_shells() -> Vec<AvailableShell> {
 			default_command.clone(),
 			&default_command,
 			true,
+			None,
 		);
 		shells
 	}
