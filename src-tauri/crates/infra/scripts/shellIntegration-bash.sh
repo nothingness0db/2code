@@ -102,9 +102,9 @@ fi
 if [ -z "${VSCODE_PYTHON_AUTOACTIVATE_GUARD:-}" ]; then
 	export VSCODE_PYTHON_AUTOACTIVATE_GUARD=1
 	if [ -n "${VSCODE_PYTHON_BASH_ACTIVATE:-}" ] && [ "$TERM_PROGRAM" = "vscode" ]; then
-		# Prevent crashing by negating exit code
-		if ! builtin eval "$VSCODE_PYTHON_BASH_ACTIVATE"; then
-			__vsc_activation_status=$?
+		builtin eval "$VSCODE_PYTHON_BASH_ACTIVATE"
+		__vsc_activation_status=$?
+		if [ "$__vsc_activation_status" -ne 0 ]; then
 			builtin printf '\x1b[0m\x1b[7m * \x1b[0;103m VS Code Python bash activation failed with exit code %d \x1b[0m' "$__vsc_activation_status"
 		fi
 	fi
@@ -225,7 +225,8 @@ unset VSCODE_STABLE
 
 # Report continuation prompt
 if [ "$__vsc_stable" = "0" ]; then
-	builtin printf "\e]633;P;ContinuationPrompt=$(echo "$PS2" | sed 's/\x1b/\\\\x1b/g')\a"
+	__vsc_continuation_prompt="$(echo "$PS2" | sed 's/\x1b/\\\\x1b/g')"
+	builtin printf '\e]633;P;ContinuationPrompt=%s\a' "$__vsc_continuation_prompt"
 fi
 
 if [ -n "$STARSHIP_SESSION_KEY" ]; then

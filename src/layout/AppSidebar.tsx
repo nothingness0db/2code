@@ -1,3 +1,4 @@
+import "@fontsource-variable/bricolage-grotesque";
 import { Box, Flex, HStack, Icon, IconButton, Text } from "@chakra-ui/react";
 import { LayoutGroup } from "motion/react";
 import { useCallback, useMemo, useRef } from "react";
@@ -8,6 +9,7 @@ import * as m from "@/paraglide/messages.js";
 import { SidebarLink } from "@/shared/components/SidebarLink";
 import { useDialogState } from "@/shared/hooks/useDialogState";
 import { useHorizontalResize } from "@/shared/hooks/useHorizontalResize";
+import { isMacPlatform, isWindowsPlatform } from "@/shared/lib/platform";
 import { ProjectGroupSection } from "./sidebar/ProjectGroupSection";
 import { ProjectMenuItem } from "./sidebar/ProjectMenuItem";
 import {
@@ -15,10 +17,6 @@ import {
 	APP_SIDEBAR_MIN_WIDTH,
 	useAppSidebarStore,
 } from "./sidebarStore";
-
-function isMacPlatform() {
-	return /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
-}
 
 export default function AppSidebar() {
 	const { data: projects } = useProjects();
@@ -101,26 +99,25 @@ export default function AppSidebar() {
 				minH="0"
 				flexShrink={0}
 				position="relative"
-				bg="bg"
-				borderRightWidth="1px"
-				borderColor="border.muted"
+				bg="bg.subtle"
 				onKeyDown={handleKeyDown}
 			>
 				<LayoutGroup id="app-sidebar">
 					<Flex direction="column" h="full" minH="0" w="full">
 						<Flex
 							data-tauri-drag-region
-							h={isMacPlatform() ? "66px" : "48px"}
+							h={isMacPlatform() || isWindowsPlatform() ? "80px" : "52px"}
 							flexShrink={0}
 							align="center"
 							justify="start"
 							paddingInline="4"
-							pt={isMacPlatform() ? "5" : "2"}
+							pt={isMacPlatform() || isWindowsPlatform() ? "8" : "2"}
 						>
 							<Text
-								fontWeight="600"
-								color="fg"
-								fontSize="sm"
+								fontFamily="'Bricolage Grotesque Variable', sans-serif"
+								fontWeight="700"
+								color="fg.muted"
+								letterSpacing="tight"
 								userSelect="none"
 								pointerEvents="none"
 								whiteSpace="nowrap"
@@ -274,9 +271,7 @@ export default function AppSidebar() {
 						},
 					}}
 					_focusVisible={{
-						outline: "2px solid",
-						outlineColor: "var(--app-focus-ring)",
-						outlineOffset: "-2px",
+						outline: "none",
 						_before: {
 							bg: "border.emphasized",
 						},

@@ -1,6 +1,6 @@
-import { Box, Center, EmptyState, HStack, Icon, Text, VStack } from "@chakra-ui/react";
+import { Box, Heading, EmptyState, VStack, Center } from "@chakra-ui/react";
 import { useEffect } from "react";
-import { FiFolder, FiFolderPlus } from "react-icons/fi";
+import { FiFolderPlus } from "react-icons/fi";
 import { useNavigate } from "react-router";
 import * as m from "@/paraglide/messages.js";
 import { useProjects } from "@/features/projects/hooks";
@@ -25,26 +25,22 @@ export default function HomePage() {
 	}, [projects, navigate]);
 
 	return (
-		<Box h="full">
-			<HStack
+		<Box p="8" pt="16" h="full" position="relative">
+			<Box
 				data-tauri-drag-region
-				h="52px"
-				px="5"
-				borderBottomWidth="1px"
-				borderColor="border"
-				gap="2"
-			>
-				<Icon color="fg.muted" fontSize="sm">
-					<FiFolder />
-				</Icon>
-				<Text fontSize="sm" fontWeight="600" userSelect="none">
-					{m.home()}
-				</Text>
-			</HStack>
+				position="absolute"
+				top="0"
+				left="0"
+				right="0"
+				h="32px"
+			/>
+			<Heading size="2xl" fontWeight="bold">
+				{m.home()}
+			</Heading>
 
 			{hasNoProjects && (
-				<Center h="calc(100% - 52px)">
-					<EmptyState.Root size="sm">
+				<Center h="calc(100vh - 200px)">
+					<EmptyState.Root>
 						<EmptyState.Content>
 							<EmptyState.Indicator>
 								<FiFolderPlus />

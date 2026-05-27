@@ -54,7 +54,7 @@ function __vsc_apply_env_vars
 	if test $__vsc_applied_env_vars -eq 1;
 		return
 	end
-	set -l __vsc_applied_env_vars 1
+	set -g __vsc_applied_env_vars 1
 	# Apply EnvironmentVariableCollections if needed
 	if test -n "$VSCODE_ENV_REPLACE"
 		set ITEMS (string split : $VSCODE_ENV_REPLACE)
@@ -126,11 +126,25 @@ end
 # Escape a value for use in the 'P' ("Property") or 'E' ("Command Line") sequences.
 # Backslashes are doubled and non-alphanumeric characters are hex encoded.
 function __vsc_escape_value
-	# Escape backslashes and semi-colons
-	echo $argv \
-	| string replace --all '\\' '\\\\' \
-	| string replace --all ';' '\\x3b' \
-	;
+	# Escape backslashes, semi-colons, and control characters (bytes < 0x20).
+	set -l str $argv
+	set -l out ""
+	set -l len (string length -- $str)
+	for i in (seq $len)
+		set -l char (string sub -s $i -l 1 -- $str)
+		set -l val (printf "%d" "'$char")
+		if test $val -lt 32
+			set -l hex (printf "%02x" "'$char")
+			set out "$out\\x$hex"
+		else if test $val -eq 92
+			set out "$out\\\\"
+		else if test $val -eq 59
+			set out "$out\\x3b"
+		else
+			set out "$out$char"
+		end
+	end
+	echo $out
 end
 
 # Sent right after an interactive command has finished executing.

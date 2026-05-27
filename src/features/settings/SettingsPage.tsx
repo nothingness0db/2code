@@ -3,8 +3,7 @@ import {
 	createListCollection,
 	Field,
 	Flex,
-	HStack,
-	Icon,
+	Heading,
 	Portal,
 	Select,
 	Skeleton,
@@ -14,14 +13,6 @@ import {
 	Text,
 } from "@chakra-ui/react";
 import { use, useMemo, useState } from "react";
-import {
-	FiBell,
-	FiCode,
-	FiInfo,
-	FiMonitor,
-	FiSettings,
-	FiTerminal,
-} from "react-icons/fi";
 import { useSearchParams } from "react-router";
 import { useDebugStore } from "@/features/debug/debugStore";
 import { TerminalPreview } from "@/features/terminal/TerminalPreview";
@@ -60,15 +51,6 @@ const settingsTabs = [
 
 type SettingsTab = (typeof settingsTabs)[number];
 
-const settingsTabIcons: Record<SettingsTab, React.ReactNode> = {
-	general: <FiSettings />,
-	terminal: <FiTerminal />,
-	template: <FiCode />,
-	notification: <FiBell />,
-	topbar: <FiMonitor />,
-	about: <FiInfo />,
-};
-
 function readSettingsTab(value: string | null): SettingsTab {
 	return settingsTabs.includes(value as SettingsTab)
 		? (value as SettingsTab)
@@ -97,23 +79,19 @@ export default function SettingsPage() {
 	}, [locale]);
 
 	return (
-		<Box h="full">
-			<HStack
+		<Box p="8" pt="16" position="relative">
+			<Box
 				data-tauri-drag-region
-				h="52px"
-				px="5"
-				borderBottomWidth="1px"
-				borderColor="border"
-				gap="2"
-			>
-				<Icon color="fg.muted" fontSize="sm">
-					<FiSettings />
-				</Icon>
-				<Text fontSize="sm" fontWeight="600" userSelect="none">
+				position="absolute"
+				top="0"
+				left="0"
+				right="0"
+				h="32px"
+			/>
+			<Stack gap="6">
+				<Heading size="2xl" fontWeight="bold">
 					{m.settings()}
-				</Text>
-			</HStack>
-			<Box h="calc(100% - 52px)" overflow="auto" p="5">
+				</Heading>
 				<Tabs.Root
 					value={activeTab}
 					onValueChange={(e) => {
@@ -123,39 +101,23 @@ export default function SettingsPage() {
 							{ replace: true },
 						);
 					}}
-					variant="enclosed"
+					variant="plain"
 				>
-					<Tabs.List
-						bg="bg.muted"
-						mb="5"
-						overflowX="auto"
-						p="1"
-						rounded="l3"
-					>
+					<Tabs.List bg="bg.muted" rounded="l3" p="1">
 						<Tabs.Trigger value="general">
-							{settingsTabIcons.general}
 							{m.general()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="terminal">
-							{settingsTabIcons.terminal}
 							{m.terminal()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="template">
-							{settingsTabIcons.template}
 							{m.terminalTemplates()}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="notification">
-							{settingsTabIcons.notification}
 							{m.notification()}
 						</Tabs.Trigger>
-						<Tabs.Trigger value="topbar">
-							{settingsTabIcons.topbar}
-							{m.topbar()}
-						</Tabs.Trigger>
-						<Tabs.Trigger value="about">
-							{settingsTabIcons.about}
-							{m.about()}
-						</Tabs.Trigger>
+						<Tabs.Trigger value="topbar">{m.topbar()}</Tabs.Trigger>
+						<Tabs.Trigger value="about">{m.about()}</Tabs.Trigger>
 						<Tabs.Indicator rounded="l2" />
 					</Tabs.List>
 					<Tabs.Content value="general">
@@ -306,7 +268,7 @@ export default function SettingsPage() {
 						<AboutSettings />
 					</Tabs.Content>
 				</Tabs.Root>
-			</Box>
+			</Stack>
 		</Box>
 	);
 }

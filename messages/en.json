@@ -76,6 +76,7 @@
 	"defaultOption": "default",
 	"customShell": "Custom",
 	"customShellPlaceholder": "e.g. /usr/bin/fish",
+	"shellNoIntegration": "No shell integration",
 	"terminalOpenLink": "Open Link",
 	"terminalOpenLinkConfirmDescription": "Choose where to open this link. Hold Ctrl and click to open directly in the default browser next time.",
 	"terminalOpenLinkUrlLabel": "Link",

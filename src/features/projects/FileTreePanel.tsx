@@ -84,6 +84,7 @@ interface FileTreePanelProps {
 	profileId: string;
 	rootPath: string;
 	isOpen: boolean;
+	isActive?: boolean;
 	onOpenFile?: (filePath: string) => void;
 }
 
@@ -499,6 +500,7 @@ export default function FileTreePanel({
 	profileId,
 	rootPath,
 	isOpen,
+	isActive = true,
 	onOpenFile,
 }: FileTreePanelProps) {
 	const [openFilePath, setOpenFilePath] = useState<string | null>(null);
@@ -553,8 +555,8 @@ export default function FileTreePanel({
 		data: rootChildPaths,
 		error: treePathsError,
 		isError: isTreePathsError,
-	} = useFileTreeChildPaths(rootPath, null, isOpen);
-	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen);
+	} = useFileTreeChildPaths(rootPath, null, isOpen && isActive);
+	const { data: gitStatusEntries } = useFileTreeGitStatus(profileId, isOpen && isActive);
 	const loadFileTreeChildPaths = useLoadFileTreeChildPaths(rootPath);
 	const createFileTreePath = useCreateFileTreePath(rootPath, profileId);
 	const renameFileTreePath = useRenameFileTreePath(rootPath, profileId);

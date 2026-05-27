@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Component, Path};
 
-use crate::no_window::command_without_windows_console;
+use crate::no_window::silent_command;
 
 use model::error::AppError;
 use model::filesystem::FileTreeGitStatusEntry;
@@ -12,6 +12,7 @@ use model::project::{
 	GitAuthor, GitCommit, GitDiffStats, GitPullRequestStatus,
 };
 
+/// Deserialized response from `gh pr list --json`.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GhPullRequest {
@@ -24,6 +25,7 @@ struct GhPullRequest {
 	head_repository_owner: Option<GhPullRequestOwner>,
 }
 
+/// Owner login from a GitHub pull request's head repository.
 #[derive(serde::Deserialize)]
 struct GhPullRequestOwner {
 	login: String,
@@ -31,6 +33,8 @@ struct GhPullRequestOwner {
 
 const MAX_BINARY_PREVIEW_BYTES: usize = 20 * 1024 * 1024;
 
+/// Resolve the GitHub avatar URL for the repository owner, falling back to the
+/// GitHub avatars CDN if the `gh` CLI is unavailable.
 pub fn github_avatar_url(folder: &str) -> Option<String> {
 	let remote_url = remote_url(folder).ok().flatten()?;
 	let (owner, _) = parse_github_owner_and_repo(&remote_url)?;
@@ -40,8 +44,9 @@ pub fn github_avatar_url(folder: &str) -> Option<String> {
 	Some(format!("https://avatars.githubusercontent.com/{owner}?v=4"))
 }
 
+/// Fetch the avatar URL for a GitHub user via the `gh` CLI.
 fn github_avatar_url_from_api(owner: &str) -> Option<String> {
-	let output = command_without_windows_console("gh")
+	let output = silent_command("gh")
 		.args(["api", &format!("users/{owner}"), "--jq", ".avatar_url"])
 		.output();
 
@@ -58,8 +63,9 @@ fn github_avatar_url_from_api(owner: &str) -> Option<String> {
 	Some(avatar)
 }
 
+/// Get the `origin` remote URL for the repository, or `None` if there is no remote.
 pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["remote", "get-url", "origin"])
 		.current_dir(folder)
 		.output()?;
@@ -91,8 +97,9 @@ pub fn remote_url(folder: &str) -> Result<Option<String>, AppError> {
 	Ok(Some(remote))
 }
 
+/// Initialize a new git repository in the given directory.
 pub fn init(dir: &Path) -> Result<(), AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.arg("init")
 		.current_dir(dir)
 		.output()?;
@@ -104,8 +111,9 @@ pub fn init(dir: &Path) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Get the current branch name, falling back to `"main"` for detached or non-git directories.
 pub fn branch(folder: &str) -> Result<String, AppError> {
-	let sym_output = command_without_windows_console("git")
+	let sym_output = silent_command("git")
 		.args(["symbolic-ref", "--short", "HEAD"])
 		.current_dir(folder)
 		.output()?;
@@ -115,7 +123,7 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 			.to_string());
 	}
 
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["rev-parse", "--abbrev-ref", "HEAD"])
 		.current_dir(folder)
 		.output()?;
@@ -125,8 +133,9 @@ pub fn branch(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Get the porcelain status of all files (tracked, untracked, ignored) in the repository.
 pub fn status(folder: &str) -> Result<Vec<FileTreeGitStatusEntry>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args([
 			"status",
 			"--porcelain=v1",
@@ -157,7 +166,7 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
 	// Stage all changes into the temporary index without mutating the real one.
-	let add_output = command_without_windows_console("git")
+	let add_output = silent_command("git")
 		.args(["add", "-A"])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", &tmp_index)
@@ -172,7 +181,7 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	}
 
 	// Diff the temporary index (everything staged) against HEAD
-	let diff_output = command_without_windows_console("git")
+	let diff_output = silent_command("git")
 		.args([
 			"diff",
 			"--no-color",
@@ -204,10 +213,11 @@ pub fn diff(folder: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&diff_output.stdout).to_string())
 }
 
+/// Get aggregate diff stats (files changed, insertions, deletions) for the working tree vs HEAD.
 pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	let (_tmp_dir, tmp_index) = create_temp_index_from_repo(folder)?;
 
-	let add_output = command_without_windows_console("git")
+	let add_output = silent_command("git")
 		.args(["add", "-A"])
 		.current_dir(folder)
 		.env("GIT_INDEX_FILE", &tmp_index)
@@ -221,7 +231,7 @@ pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 		));
 	}
 
-	let diff_output = command_without_windows_console("git")
+	let diff_output = silent_command("git")
 		.args([
 			"diff",
 			"--no-color",
@@ -265,6 +275,7 @@ pub fn diff_stats(folder: &str) -> Result<GitDiffStats, AppError> {
 	})
 }
 
+/// Create a temporary directory and copy the repo's git index into it.
 fn create_temp_index_from_repo(
 	folder: &str,
 ) -> Result<(tempfile::TempDir, std::path::PathBuf), AppError> {
@@ -287,10 +298,11 @@ fn create_temp_index_from_repo(
 	Ok((tmp_dir, tmp_index))
 }
 
+/// Resolve the absolute path to the git index file for the given folder.
 fn resolve_git_index_path(
 	folder: &str,
 ) -> Result<Option<std::path::PathBuf>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["rev-parse", "--git-path", "index"])
 		.current_dir(folder)
 		.output()?;
@@ -314,8 +326,9 @@ fn resolve_git_index_path(
 	Ok(Some(resolved))
 }
 
+/// Get the last `limit` commits from the repository log.
 pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args([
 			"log",
 			&format!("-{limit}"),
@@ -338,10 +351,11 @@ pub fn log(folder: &str, limit: u32) -> Result<Vec<GitCommit>, AppError> {
 	Ok(parse_git_log(&stdout))
 }
 
+/// Get the diff patch for a single commit by hash.
 pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	validate_commit_hash(commit_hash)?;
 
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args([
 			"show",
 			"--no-color",
@@ -361,6 +375,8 @@ pub fn show(folder: &str, commit_hash: &str) -> Result<String, AppError> {
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Read a file from the working tree, returning its absolute path.
+/// Returns `None` if the file does not exist.
 pub fn read_worktree_file(
 	folder: &str,
 	path: &str,
@@ -387,6 +403,7 @@ pub fn read_worktree_file(
 	Ok(Some(file_path.to_string_lossy().to_string()))
 }
 
+/// Read a file at HEAD revision, caching the blob to a temp file.
 pub fn read_head_file(
 	folder: &str,
 	path: &str,
@@ -396,6 +413,7 @@ pub fn read_head_file(
 	read_git_blob_to_cache(folder, &format!("HEAD:{path}"), &cache_path)
 }
 
+/// Read a file at a specific commit revision, caching the blob to a temp file.
 pub fn read_commit_file(
 	folder: &str,
 	commit_hash: &str,
@@ -412,6 +430,7 @@ pub fn read_commit_file(
 	)
 }
 
+/// Read a file at the parent of a specific commit, caching the blob to a temp file.
 pub fn read_parent_commit_file(
 	folder: &str,
 	commit_hash: &str,
@@ -428,6 +447,7 @@ pub fn read_parent_commit_file(
 	)
 }
 
+/// Stage the given files and create a commit, returning the new HEAD hash.
 pub fn commit(
 	folder: &str,
 	files: &[String],
@@ -443,7 +463,7 @@ pub fn commit(
 
 	// Stage the selected paths first so untracked files and deletions can be
 	// committed, then use `--only` so unrelated staged files stay out.
-	let add_output = command_without_windows_console("git")
+	let add_output = silent_command("git")
 		.arg("add")
 		.arg("-A")
 		.arg("--")
@@ -458,7 +478,7 @@ pub fn commit(
 		)));
 	}
 
-	let mut commit_command = command_without_windows_console("git");
+	let mut commit_command = silent_command("git");
 	commit_command
 		.arg("commit")
 		.arg("--only")
@@ -482,7 +502,7 @@ pub fn commit(
 		)));
 	}
 
-	let rev_parse = command_without_windows_console("git")
+	let rev_parse = silent_command("git")
 		.args(["rev-parse", "HEAD"])
 		.current_dir(folder)
 		.output()?;
@@ -499,13 +519,14 @@ pub fn commit(
 		.to_string())
 }
 
+/// Discard changes for the given paths — restore tracked files to HEAD and remove untracked files.
 pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	let paths = validate_discard_paths(paths)?;
 	let (tracked_paths, untracked_paths) =
 		partition_paths_by_tracking(folder, &paths)?;
 
 	if !tracked_paths.is_empty() {
-		let restore_output = command_without_windows_console("git")
+		let restore_output = silent_command("git")
 			.args(["restore", "--source=HEAD", "--staged", "--worktree", "--"])
 			.args(&tracked_paths)
 			.current_dir(folder)
@@ -520,7 +541,7 @@ pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	}
 
 	if !untracked_paths.is_empty() {
-		let clean_output = command_without_windows_console("git")
+		let clean_output = silent_command("git")
 			.args(["clean", "-f", "--"])
 			.args(&untracked_paths)
 			.current_dir(folder)
@@ -537,8 +558,9 @@ pub fn discard_changes(folder: &str, paths: &[String]) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Count how many commits HEAD is ahead of its upstream branch.
 pub fn ahead_count(folder: &str) -> u32 {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["rev-list", "--count", "@{u}..HEAD"])
 		.current_dir(folder)
 		.output();
@@ -552,13 +574,14 @@ pub fn ahead_count(folder: &str) -> u32 {
 	}
 }
 
+/// List commit hashes that are unique to the given branch (not reachable from other refs).
 pub fn branch_unique_commits(
 	folder: &str,
 	branch_name: &str,
 ) -> Result<Vec<String>, AppError> {
 	let branch_ref = format!("refs/heads/{branch_name}");
 	let other_refs = refs_except_branch(folder, &branch_ref)?;
-	let mut command = command_without_windows_console("git");
+	let mut command = silent_command("git");
 	command
 		.args(["rev-list", "--reverse", &branch_ref])
 		.current_dir(folder);
@@ -583,6 +606,7 @@ pub fn branch_unique_commits(
 		.collect())
 }
 
+/// Get aggregate diff stats for a list of commits.
 pub fn commit_diff_stats(
 	folder: &str,
 	commits: &[String],
@@ -591,7 +615,7 @@ pub fn commit_diff_stats(
 		return Ok(GitDiffStats::default());
 	}
 
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args([
 			"show",
 			"--no-color",
@@ -615,8 +639,9 @@ pub fn commit_diff_stats(
 	Ok(sum_shortstat_lines(&stdout))
 }
 
+/// Push the current branch to its upstream remote.
 pub fn push(folder: &str) -> Result<(), AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["push"])
 		.current_dir(folder)
 		.output()?;
@@ -628,6 +653,7 @@ pub fn push(folder: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Check if the current branch has an associated GitHub pull request.
 pub fn pull_request_status(
 	folder: &str,
 ) -> Result<Option<GitPullRequestStatus>, AppError> {
@@ -643,7 +669,7 @@ pub fn pull_request_status(
 		return Ok(None);
 	};
 
-	let output = command_without_windows_console("gh")
+	let output = silent_command("gh")
 		.args([
 			"pr",
 			"list",
@@ -688,7 +714,7 @@ pub fn worktree_add(
 	branch_name: &str,
 	worktree_path: &str,
 ) -> Result<(), AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["worktree", "add", "-b", branch_name, worktree_path])
 		.current_dir(project_folder)
 		.output()?;
@@ -710,13 +736,13 @@ pub fn worktree_add(
 	// Try to delete the conflicting branch and retry once.
 	if stderr.contains("cannot lock ref") {
 		if let Some(conflicting) = extract_conflicting_ref(&stderr) {
-			let _ = command_without_windows_console("git")
+			let _ = silent_command("git")
 				.args(["branch", "-D", &conflicting])
 				.current_dir(project_folder)
 				.output();
 
 			// Retry
-			let retry = command_without_windows_console("git")
+			let retry = silent_command("git")
 				.args(["worktree", "add", "-b", branch_name, worktree_path])
 				.current_dir(project_folder)
 				.output()?;
@@ -735,8 +761,9 @@ pub fn worktree_add(
 	)))
 }
 
+/// Force-remove a git worktree, logging warnings on failure.
 pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["worktree", "remove", worktree_path, "--force"])
 		.current_dir(project_folder)
 		.output();
@@ -753,8 +780,9 @@ pub fn worktree_remove(project_folder: &str, worktree_path: &str) {
 	}
 }
 
+/// Force-delete a branch, logging warnings on failure.
 pub fn branch_delete(project_folder: &str, branch_name: &str) {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["branch", "-D", branch_name])
 		.current_dir(project_folder)
 		.output();
@@ -771,11 +799,12 @@ pub fn branch_delete(project_folder: &str, branch_name: &str) {
 	}
 }
 
+/// List all refs in the repo except the given branch ref.
 fn refs_except_branch(
 	folder: &str,
 	branch_ref: &str,
 ) -> Result<Vec<String>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["for-each-ref", "--format=%(refname)"])
 		.args(["refs/heads", "refs/remotes", "refs/tags"])
 		.current_dir(folder)
@@ -798,6 +827,7 @@ fn refs_except_branch(
 
 // --- Private helpers ---
 
+/// Validate that a commit hash is 4–40 hex characters.
 pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	if hash.len() < 4 || hash.len() > 40 {
 		return Err(AppError::GitError(format!(
@@ -813,6 +843,7 @@ pub fn validate_commit_hash(hash: &str) -> Result<(), AppError> {
 	Ok(())
 }
 
+/// Validate and trim a commit message, rejecting empty messages.
 pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
 	let trimmed = message.trim();
 	if trimmed.is_empty() {
@@ -823,6 +854,7 @@ pub fn validate_commit_message(message: &str) -> Result<String, AppError> {
 	Ok(trimmed.to_string())
 }
 
+/// Validate that commit file paths are non-empty, relative, and deduplicated.
 pub fn validate_commit_files(
 	files: &[String],
 ) -> Result<Vec<String>, AppError> {
@@ -833,6 +865,7 @@ pub fn validate_commit_files(
 	)
 }
 
+/// Validate discard paths are non-empty, relative, and deduplicated.
 fn validate_discard_paths(paths: &[String]) -> Result<Vec<String>, AppError> {
 	validate_repo_relative_paths(
 		paths,
@@ -841,6 +874,7 @@ fn validate_discard_paths(paths: &[String]) -> Result<Vec<String>, AppError> {
 	)
 }
 
+/// Validate a list of repo-relative paths, deduplicating and rejecting absolute/escape paths.
 fn validate_repo_relative_paths(
 	paths: &[String],
 	label: &str,
@@ -863,6 +897,7 @@ fn validate_repo_relative_paths(
 	Ok(validated)
 }
 
+/// Validate a single repo-relative path: non-empty, no NUL bytes, no absolute or parent-dir escapes.
 fn validate_repo_relative_path(
 	path: &str,
 	label: &str,
@@ -897,6 +932,7 @@ fn validate_repo_relative_path(
 	Ok(trimmed.to_string())
 }
 
+/// Parse a git shortstat line into `(files_changed, insertions, deletions)`.
 pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	let mut files = 0u32;
 	let mut insertions = 0u32;
@@ -922,6 +958,7 @@ pub fn parse_shortstat(line: &str) -> (u32, u32, u32) {
 	(files, insertions, deletions)
 }
 
+/// Sum multiple shortstat lines into a single `GitDiffStats`.
 fn sum_shortstat_lines(output: &str) -> GitDiffStats {
 	let mut stats = GitDiffStats::default();
 
@@ -935,6 +972,7 @@ fn sum_shortstat_lines(output: &str) -> GitDiffStats {
 	stats
 }
 
+/// Parse the combined `git log` + `--shortstat` output into structured commit entries.
 pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	if output.trim().is_empty() {
 		return Vec::new();
@@ -999,6 +1037,7 @@ pub fn parse_git_log(output: &str) -> Vec<GitCommit> {
 	commits
 }
 
+/// Borrowed fields from a single `\x1f`-delimited commit line.
 struct GitLogCommitLine<'a> {
 	full_hash: &'a str,
 	hash: &'a str,
@@ -1008,6 +1047,7 @@ struct GitLogCommitLine<'a> {
 	message: &'a str,
 }
 
+/// Parse a single `\x1f`-delimited commit header line from `git log` output.
 fn parse_git_log_commit_line(line: &str) -> Option<GitLogCommitLine<'_>> {
 	let mut parts = line.split('\x1f');
 	let commit = GitLogCommitLine {
@@ -1024,6 +1064,7 @@ fn parse_git_log_commit_line(line: &str) -> Option<GitLogCommitLine<'_>> {
 	Some(commit)
 }
 
+/// Parse `git status --porcelain=v1 -z` NUL-delimited output into status entries.
 fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 	let records: Vec<&[u8]> = output
 		.split(|byte| *byte == 0)
@@ -1058,6 +1099,7 @@ fn parse_porcelain_status_z(output: &[u8]) -> Vec<FileTreeGitStatusEntry> {
 	entries
 }
 
+/// Append `/` to status paths that point to existing directories.
 fn normalize_file_tree_git_status_paths(
 	root: &Path,
 	entries: &mut [FileTreeGitStatusEntry],
@@ -1072,6 +1114,7 @@ fn normalize_file_tree_git_status_paths(
 	}
 }
 
+/// Map a two-byte porcelain status code to a human-readable status string.
 fn map_porcelain_status(status_code: &[u8]) -> Option<&'static str> {
 	if status_code.contains(&b'!') {
 		return Some("ignored");
@@ -1112,11 +1155,12 @@ fn extract_conflicting_ref(stderr: &str) -> Option<String> {
 	Some(name.to_string())
 }
 
+/// Partition paths into tracked (in git index) and untracked lists.
 fn partition_paths_by_tracking(
 	folder: &str,
 	paths: &[String],
 ) -> Result<(Vec<String>, Vec<String>), AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["ls-files", "-z", "--"])
 		.args(paths)
 		.current_dir(folder)
@@ -1150,6 +1194,7 @@ fn partition_paths_by_tracking(
 	Ok((tracked_paths, untracked_paths))
 }
 
+/// Check if a path (or files beneath it) is tracked in the git index.
 fn is_tracked_request(path: &str, tracked_files: &HashSet<String>) -> bool {
 	let path = path.trim_end_matches('/');
 	if tracked_files.contains(path) {
@@ -1161,6 +1206,7 @@ fn is_tracked_request(path: &str, tracked_files: &HashSet<String>) -> bool {
 		.any(|tracked| tracked.starts_with(&prefix))
 }
 
+/// Build an error message from a command's stderr or stdout.
 fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 	if !stderr.is_empty() {
@@ -1175,6 +1221,7 @@ fn command_error(prefix: &str, output: &std::process::Output) -> String {
 	prefix.to_string()
 }
 
+/// Parse `gh pr list --json` output and filter by expected head repository owner.
 fn parse_pull_request_list(
 	output: &[u8],
 	expected_head_owner: &str,
@@ -1204,6 +1251,7 @@ fn parse_pull_request_list(
 		.collect())
 }
 
+/// Check if an error message indicates a non-fatal non-GitHub remote lookup failure.
 fn is_non_github_pr_lookup_error(message: &str) -> bool {
 	let lower = message.to_ascii_lowercase();
 	[
@@ -1216,6 +1264,7 @@ fn is_non_github_pr_lookup_error(message: &str) -> bool {
 	.any(|pattern| lower.contains(pattern))
 }
 
+/// Read a git blob to a temp cache file, returning the cached file path.
 fn read_git_blob_to_cache(
 	folder: &str,
 	spec: &str,
@@ -1238,7 +1287,7 @@ fn read_git_blob_to_cache(
 		}
 	}
 
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["cat-file", "blob", spec])
 		.current_dir(folder)
 		.output()?;
@@ -1261,11 +1310,12 @@ fn read_git_blob_to_cache(
 	Err(AppError::GitError(stderr))
 }
 
+/// Get the byte size of a git blob, or `None` if it does not exist.
 fn get_git_blob_size(
 	folder: &str,
 	spec: &str,
 ) -> Result<Option<u64>, AppError> {
-	let output = command_without_windows_console("git")
+	let output = silent_command("git")
 		.args(["cat-file", "-s", spec])
 		.current_dir(folder)
 		.output()?;
@@ -1288,6 +1338,7 @@ fn get_git_blob_size(
 	Err(AppError::GitError(stderr))
 }
 
+/// Check if a git error message indicates a missing blob.
 fn is_missing_blob_error(stderr: &str) -> bool {
 	[
 		"does not exist in",
@@ -1300,6 +1351,7 @@ fn is_missing_blob_error(stderr: &str) -> bool {
 	.any(|pattern| stderr.contains(pattern))
 }
 
+/// Build a deterministic cache path for a git preview blob.
 fn preview_cache_path(
 	folder: &str,
 	source: &str,
@@ -1323,6 +1375,7 @@ fn preview_cache_path(
 	cache_path.join(relative_path)
 }
 
+/// Atomically write preview bytes to a cache file using a named temp file.
 fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 	if let Some(parent) = path.parent() {
 		std::fs::create_dir_all(parent)?;
@@ -1345,6 +1398,7 @@ fn write_preview_cache_file(path: &Path, bytes: &[u8]) -> Result<(), AppError> {
 	)))
 }
 
+/// Parse a GitHub remote URL into `(owner, repo)` — supports HTTPS, SCP, and SSH formats.
 fn parse_github_owner_and_repo(remote_url: &str) -> Option<(String, String)> {
 	let normalized_url = remote_url.trim().trim_end_matches(".git");
 	let normalized_url = normalized_url
@@ -1384,6 +1438,7 @@ fn parse_github_owner_and_repo(remote_url: &str) -> Option<(String, String)> {
 	Some((owner, repo))
 }
 
+/// Split a remote URL into `(host, path)` components.
 fn split_remote_host_and_path(remote_url: &str) -> Option<(String, String)> {
 	if let Some(scheme_pos) = remote_url.find("://") {
 		let without_scheme = &remote_url[scheme_pos + 3..];
@@ -1412,6 +1467,7 @@ fn split_remote_host_and_path(remote_url: &str) -> Option<(String, String)> {
 	Some((normalize_host(host), path.to_string()))
 }
 
+/// Check if the given host is a GitHub domain.
 fn is_github_host(host: &str) -> bool {
 	matches!(
 		normalize_host(host).as_str(),
@@ -1419,6 +1475,7 @@ fn is_github_host(host: &str) -> bool {
 	)
 }
 
+/// Strip user info and port from a host string, returning a lowercase hostname.
 fn normalize_host(host: &str) -> String {
 	let host = host.split('@').next_back().unwrap_or(host);
 	let host = host.split(':').next().unwrap_or(host);
@@ -1803,12 +1860,12 @@ mod tests {
 		let modified = vec![4_u8, 5, 6, 7];
 
 		std::fs::write(dir.join("image.bin"), &initial).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "image.bin"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "add image"])
 			.current_dir(&dir)
 			.output()
@@ -1840,30 +1897,30 @@ mod tests {
 		let after = vec![5_u8, 6, 7, 8];
 
 		std::fs::write(dir.join("image.bin"), &before).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "image.bin"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "add image"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
 
 		std::fs::write(dir.join("image.bin"), &after).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "image.bin"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "update image"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
 
-		let head = command_without_windows_console("git")
+		let head = silent_command("git")
 			.args(["rev-parse", "HEAD"])
 			.current_dir(&dir)
 			.output()
@@ -1898,12 +1955,12 @@ mod tests {
 		let oversized = vec![0_u8; MAX_BINARY_PREVIEW_BYTES + 1];
 
 		std::fs::write(dir.join("large.bin"), oversized).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "large.bin"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "add large image"])
 			.current_dir(&dir)
 			.output()
@@ -1925,17 +1982,17 @@ mod tests {
 		let dir = std::env::temp_dir()
 			.join(format!("git-infra-test-{}", uuid::Uuid::new_v4()));
 		std::fs::create_dir_all(&dir).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["init"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["config", "user.email", "test@test.com"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["config", "user.name", "Test"])
 			.current_dir(&dir)
 			.output()
@@ -1950,12 +2007,12 @@ mod tests {
 		msg: &str,
 	) {
 		std::fs::write(dir.join(filename), content).unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", filename])
 			.current_dir(dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", msg])
 			.current_dir(dir)
 			.output()
@@ -1963,7 +2020,7 @@ mod tests {
 	}
 
 	fn force_color_output(dir: &std::path::Path) {
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["config", "color.ui", "always"])
 			.current_dir(dir)
 			.output()
@@ -1971,7 +2028,7 @@ mod tests {
 	}
 
 	fn force_mnemonic_prefixes(dir: &std::path::Path) {
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["config", "diff.mnemonicPrefix", "true"])
 			.current_dir(dir)
 			.output()
@@ -2053,7 +2110,7 @@ mod tests {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "hello.txt", "hello world", "Add hello");
 
-		let log_output = command_without_windows_console("git")
+		let log_output = silent_command("git")
 			.args(["log", "-1", "--format=%H"])
 			.current_dir(&dir)
 			.output()
@@ -2075,7 +2132,7 @@ mod tests {
 		force_color_output(&dir);
 		add_commit(&dir, "hello.txt", "hello world", "Add hello");
 
-		let log_output = command_without_windows_console("git")
+		let log_output = silent_command("git")
 			.args(["log", "-1", "--format=%H"])
 			.current_dir(&dir)
 			.output()
@@ -2099,7 +2156,7 @@ mod tests {
 		force_mnemonic_prefixes(&dir);
 		add_commit(&dir, "hello.txt", "hello world", "Add hello");
 
-		let log_output = command_without_windows_console("git")
+		let log_output = silent_command("git")
 			.args(["log", "-1", "--format=%H"])
 			.current_dir(&dir)
 			.output()
@@ -2214,7 +2271,7 @@ mod tests {
 		add_commit(&dir, "a.txt", "hello", "Init");
 
 		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "a.txt"])
 			.current_dir(&dir)
 			.output()
@@ -2237,7 +2294,7 @@ mod tests {
 		add_commit(&dir, "b.txt", "foo", "Add b");
 
 		std::fs::write(dir.join("a.txt"), "hello world").unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "a.txt"])
 			.current_dir(&dir)
 			.output()
@@ -2283,24 +2340,24 @@ mod tests {
 			"<plist>tracked</plist>",
 		)
 		.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", "build/entitlements.mac.plist"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "Add tracked entitlements"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
 
 		std::fs::write(dir.join(".gitignore"), "build/\n").unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["add", ".gitignore"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["commit", "-m", "Ignore build output"])
 			.current_dir(&dir)
 			.output()
@@ -2320,7 +2377,7 @@ mod tests {
 	fn branch_unique_commits_counts_no_upstream_branch_commits() {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "base.txt", "base", "Init");
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["checkout", "-b", "feature/delete-risk"])
 			.current_dir(&dir)
 			.output()
@@ -2347,13 +2404,13 @@ mod tests {
 	fn branch_unique_commits_ignores_commits_kept_by_another_ref() {
 		let dir = create_temp_git_repo();
 		add_commit(&dir, "base.txt", "base", "Init");
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["checkout", "-b", "feature/delete-risk"])
 			.current_dir(&dir)
 			.output()
 			.unwrap();
 		add_commit(&dir, "feature-a.txt", "a", "Feature A");
-		command_without_windows_console("git")
+		silent_command("git")
 			.args(["branch", "backup/delete-risk"])
 			.current_dir(&dir)
 			.output()
@@ -2402,7 +2459,7 @@ mod tests {
 			"rename me"
 		);
 
-		let status = command_without_windows_console("git")
+		let status = silent_command("git")
 			.args(["status", "--short"])
 			.current_dir(&dir)
 			.output()

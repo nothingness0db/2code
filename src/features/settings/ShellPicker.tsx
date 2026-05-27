@@ -28,9 +28,15 @@ export function ShellPicker() {
 		items: [
 			...shells.map((shell) => ({
 				value: shell.command,
-				label: shell.is_default
-					? `${shell.label} (${m.defaultOption()})`
-					: shell.label,
+				label: (() => {
+					const suffixes = [
+						shell.is_default ? m.defaultOption() : null,
+						!shell.supports_integration ? m.shellNoIntegration() : null,
+					].filter(Boolean);
+					return suffixes.length
+						? `${shell.label} (${suffixes.join(", ")})`
+						: shell.label;
+				})(),
 			})),
 			{ value: CUSTOM_SHELL_VALUE, label: m.customShell() },
 		],

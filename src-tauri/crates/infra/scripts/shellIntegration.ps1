@@ -44,8 +44,9 @@ if ($__vscode_shell_env_reporting) {
 Remove-Variable -Name __vscode_shell_env_reporting -ErrorAction SilentlyContinue
 
 $osVersion = [System.Environment]::OSVersion.Version
-$Global:__VSCodeState.IsWindows10 = $IsWindows -and $osVersion.Major -eq 10 -and $osVersion.Minor -eq 0 -and $osVersion.Build -lt 22000
-Remove-Variable -Name osVersion -ErrorAction SilentlyContinue
+$isWindowsPlatform = [System.Environment]::OSVersion.Platform -eq 'Win32NT'
+$Global:__VSCodeState.IsWindows10 = $isWindowsPlatform -and $osVersion.Major -eq 10 -and $osVersion.Minor -eq 0 -and $osVersion.Build -lt 22000
+Remove-Variable -Name osVersion, isWindowsPlatform -ErrorAction SilentlyContinue
 
 if ($env:VSCODE_ENV_REPLACE) {
 	$Split = $env:VSCODE_ENV_REPLACE.Split(":")

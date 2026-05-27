@@ -76,6 +76,7 @@
 	"defaultOption": "默认",
 	"customShell": "自定义",
 	"customShellPlaceholder": "例如 /usr/bin/fish",
+	"shellNoIntegration": "不支持 Shell 集成",
 	"terminalOpenLink": "打开链接",
 	"terminalOpenLinkConfirmDescription": "选择要在哪里打开此链接。下次按住 Ctrl 点击可直接在默认浏览器中打开。",
 	"terminalOpenLinkUrlLabel": "链接",

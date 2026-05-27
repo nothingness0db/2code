@@ -12,13 +12,16 @@ vi.mock("@/generated", () => ({
 vi.mock("@/shared/lib/queryClient", () => ({
 	queryClient: {
 		invalidateQueries: invalidateQueriesMock,
+		getQueryData: vi.fn(() => undefined),
 	},
 }));
 
 async function loadWatcher() {
 	await import("./fileWatcher");
 	const [{ onEvent }] = watchProjectsMock.mock.calls.map((args) => args[0]);
-	return onEvent as { onmessage: (() => void) | null };
+	return onEvent as {
+		onmessage: ((event: { project_id: string }) => void) | null;
+	};
 }
 
 describe("fileWatcher", () => {
@@ -43,8 +46,8 @@ describe("fileWatcher", () => {
 	it("debounces bursts of file events into a single invalidation batch", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.();
-		channel.onmessage?.();
+		channel.onmessage?.({ project_id: "test-project" } as never);
+		channel.onmessage?.({ project_id: "test-project" } as never);
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
@@ -86,9 +89,9 @@ describe("fileWatcher", () => {
 	it("resets the debounce timer when another event arrives before the flush", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.();
+		channel.onmessage?.({ project_id: "test-project" } as never);
 		vi.advanceTimersByTime(500);
-		channel.onmessage?.();
+		channel.onmessage?.({ project_id: "test-project" } as never);
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 

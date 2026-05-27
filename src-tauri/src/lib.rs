@@ -48,6 +48,16 @@ pub fn run() {
 		.manage(handler::updater::PendingUpdate::default())
 		.setup(|app| {
 			use tauri::Manager;
+
+			// On Windows the native title bar would render as an opaque bar
+			// above the app content. Drop system decorations so the frontend
+			// can render a custom title bar that matches the macOS overlay
+			// look; the WindowControls component supplies min/max/close.
+			#[cfg(target_os = "windows")]
+			if let Some(window) = app.get_webview_window("main") {
+				let _ = window.set_decorations(false);
+			}
+
 			let app_data_dir = app
 				.path()
 				.app_data_dir()
@@ -164,6 +174,22 @@ pub fn run() {
 
 				if let Some(db) = app_handle.try_state::<infra::db::DbPool>() {
 					service::pty::mark_all_closed(&db);
+				}
+
+				// Clean up only this process's shell integration temp dirs.
+				let pid = std::process::id();
+				let pid_prefix = format!("2code-init-{pid}-");
+				let tmp = std::env::temp_dir();
+				if let Ok(entries) = std::fs::read_dir(&tmp) {
+					for entry in entries.flatten() {
+						if entry
+							.file_name()
+							.to_string_lossy()
+							.starts_with(&pid_prefix)
+						{
+							let _ = std::fs::remove_dir_all(entry.path());
+						}
+					}
 				}
 			}
 
