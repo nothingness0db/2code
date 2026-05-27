@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invalidateQueriesMock, watchProjectsMock } = vi.hoisted(() => ({
-	invalidateQueriesMock: vi.fn(),
-	watchProjectsMock: vi.fn(),
-}));
+const { invalidateQueriesMock, getQueryDataMock, watchProjectsMock } =
+	vi.hoisted(() => ({
+		invalidateQueriesMock: vi.fn(),
+		getQueryDataMock: vi.fn(),
+		watchProjectsMock: vi.fn(),
+	}));
 
 vi.mock("@/generated", () => ({
 	watchProjects: watchProjectsMock,
@@ -12,16 +14,14 @@ vi.mock("@/generated", () => ({
 vi.mock("@/shared/lib/queryClient", () => ({
 	queryClient: {
 		invalidateQueries: invalidateQueriesMock,
-		getQueryData: vi.fn(() => undefined),
+		getQueryData: getQueryDataMock,
 	},
 }));
 
 async function loadWatcher() {
 	await import("./fileWatcher");
 	const [{ onEvent }] = watchProjectsMock.mock.calls.map((args) => args[0]);
-	return onEvent as {
-		onmessage: ((event: { project_id: string }) => void) | null;
-	};
+	return onEvent as { onmessage: (() => void) | null };
 }
 
 describe("fileWatcher", () => {
@@ -29,6 +29,8 @@ describe("fileWatcher", () => {
 		vi.resetModules();
 		vi.useFakeTimers();
 		invalidateQueriesMock.mockClear();
+		getQueryDataMock.mockClear();
+		getQueryDataMock.mockReturnValue(undefined);
 		watchProjectsMock.mockClear();
 	});
 
@@ -46,8 +48,8 @@ describe("fileWatcher", () => {
 	it("debounces bursts of file events into a single invalidation batch", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.({ project_id: "test-project" } as never);
-		channel.onmessage?.({ project_id: "test-project" } as never);
+		channel.onmessage?.();
+		channel.onmessage?.();
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 
@@ -89,9 +91,9 @@ describe("fileWatcher", () => {
 	it("resets the debounce timer when another event arrives before the flush", async () => {
 		const channel = await loadWatcher();
 
-		channel.onmessage?.({ project_id: "test-project" } as never);
+		channel.onmessage?.();
 		vi.advanceTimersByTime(500);
-		channel.onmessage?.({ project_id: "test-project" } as never);
+		channel.onmessage?.();
 		vi.advanceTimersByTime(999);
 		expect(invalidateQueriesMock).not.toHaveBeenCalled();
 

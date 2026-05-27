@@ -23,14 +23,19 @@ import { collectPatchFiles } from "./patchFiles";
 import type { GitBinaryPreviewSource } from "./utils";
 
 const GIT_STATUS_REFRESH_INTERVAL_MS = 1_000;
+// Windows process creation is 5-10x slower than macOS/Linux. Polling git
+// every second creates 2+ subprocesses per tick, which is expensive on Windows.
+// Use a longer interval there while keeping the snappy 1s on macOS.
+const isWindows = navigator.platform.toUpperCase().includes("WIN");
+const GIT_POLL_INTERVAL_MS = isWindows ? 4_000 : GIT_STATUS_REFRESH_INTERVAL_MS;
 const PR_STATUS_REFRESH_INTERVAL_MS = 2 * 60 * 1_000;
 
 function useGitDiff(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.diff(profileId),
 		queryFn: () => getGitDiff({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: GIT_POLL_INTERVAL_MS,
 	});
 }
 
@@ -38,8 +43,8 @@ export function useGitLog(profileId: string) {
 	return useSuspenseQuery({
 		queryKey: queryKeys.git.log(profileId),
 		queryFn: () => getGitLog({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: GIT_POLL_INTERVAL_MS,
 	});
 }
 
@@ -55,8 +60,8 @@ export function useGitDiffStats(profileId: string, enabled = true) {
 		queryKey: queryKeys.git.diffStats(profileId),
 		queryFn: () => getGitDiffStats({ profileId }),
 		enabled,
-		staleTime: 0,
-		refetchInterval: enabled ? GIT_STATUS_REFRESH_INTERVAL_MS : false,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: enabled ? GIT_POLL_INTERVAL_MS : false,
 	});
 
 	return useMemo(() => {
@@ -74,8 +79,8 @@ export function useGitAheadCount(profileId: string) {
 	const { data } = useQuery({
 		queryKey: queryKeys.git.aheadCount(profileId),
 		queryFn: () => getGitAheadCount({ profileId }),
-		staleTime: 0,
-		refetchInterval: GIT_STATUS_REFRESH_INTERVAL_MS,
+		staleTime: GIT_POLL_INTERVAL_MS,
+		refetchInterval: GIT_POLL_INTERVAL_MS,
 	});
 	return data ?? 0;
 }

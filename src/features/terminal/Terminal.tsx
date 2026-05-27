@@ -22,7 +22,6 @@ import {
 	resizePty,
 	writeToPty,
 } from "@/generated";
-import { FileLinkProvider } from "./FileLinkProvider";
 import { TerminalLinkConfirmDialog } from "./TerminalLinkConfirmDialog";
 import { useTerminalTheme } from "./hooks";
 import { getTerminalShortcutAction } from "./keybindings";
@@ -32,15 +31,25 @@ import { sessionHistory } from "./state";
 import { useTerminalStore } from "./store";
 import "@xterm/xterm/css/xterm.css";
 
-/** Props for the persistent Terminal component. */
 interface TerminalProps {
 	profileId: string;
 	sessionId: string;
 	isActive: boolean;
+	shell?: string;
 }
 
-/** Persistent terminal component backed by a PTY session with xterm.js rendering. */
-export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
+/** Map a shell command string to a friendly display name. */
+function friendlyShellName(shell: string): string | null {
+	const lower = shell.toLowerCase();
+	if (lower.includes("pwsh")) return "PowerShell 7";
+	if (lower.includes("powershell")) return "Windows PowerShell";
+	if (lower.includes("cmd.exe")) return "Command Prompt";
+	if (lower.includes("wsl")) return "WSL";
+	if (lower.includes("bash") && lower.includes("git")) return "Git Bash";
+	return null;
+}
+
+export function Terminal({ profileId, sessionId, isActive, shell }: TerminalProps) {
 	const termRef = useRef<XTerm | null>(null);
 	const fitAddonRef = useRef<FitAddon | null>(null);
 	const isStreamReadyRef = useRef(false);
@@ -164,7 +173,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 		setPendingLink(null);
 	}, []);
 
-	const openPendingLinkExternally = useCallback(() => {
+	const openPendingLink = useCallback(() => {
 		const uri = pendingLink;
 		if (!uri) return;
 
@@ -279,12 +288,6 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			term.loadAddon(new LigaturesAddon());
 			term.loadAddon(new ProgressAddon());
 
-			// Register file-path link provider for clickable file paths
-			const fileLinkProvider = new FileLinkProvider({ profileId });
-			fileLinkProvider.setTerminal(term);
-			const fileLinkDisposable = term.registerLinkProvider(fileLinkProvider);
-			unlisteners.push(() => fileLinkDisposable.dispose());
-
 			fitAddon.fit();
 			syncTerminalLayout(1);
 
@@ -379,7 +382,16 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 				resizePty({ sessionId, rows, cols });
 			});
 
+			const shellFriendlyName = shell ? friendlyShellName(shell) : null;
 			term.onTitleChange((title) => {
+				// If we know the shell, use the friendly name instead of
+				// shell-set titles (which are often just CWD paths)
+				if (shellFriendlyName) {
+					useTerminalStore
+						.getState()
+						.updateTabTitle(profileId, sessionId, shellFriendlyName);
+					return;
+				}
 				useTerminalStore
 					.getState()
 					.updateTabTitle(profileId, sessionId, title);
@@ -440,7 +452,7 @@ export function Terminal({ profileId, sessionId, isActive }: TerminalProps) {
 			<TerminalLinkConfirmDialog
 				link={pendingLink}
 				onClose={closePendingLinkDialog}
-				onOpenDefault={openPendingLinkExternally}
+				onOpen={openPendingLink}
 			/>
 		</>
 	);

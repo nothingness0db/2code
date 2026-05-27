@@ -411,6 +411,16 @@ mod tests {
 	}
 
 	#[test]
+	fn detect_pwsh_windows_path_with_spaces() {
+		assert_eq!(
+			detect_shell_type(
+				"C:\\Program Files\\PowerShell\\7\\pwsh.exe -NoLogo -NoProfile"
+			),
+			ShellType::Pwsh
+		);
+	}
+
+	#[test]
 	fn detect_unknown() {
 		assert_eq!(detect_shell_type("nushell"), ShellType::Unknown);
 	}
