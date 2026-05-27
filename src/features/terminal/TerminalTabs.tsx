@@ -24,6 +24,7 @@ import { AsyncBoundary, InlineError } from "@/shared/components/Fallbacks";
 import FileTreeFileIcon from "@/shared/components/FileTreeFileIcon";
 import { useCloseTerminalTab } from "./hooks";
 import { useTerminalStore } from "./store";
+import { useTerminalSettingsStore } from "@/features/settings/stores/terminalSettingsStore";
 import { TabStrip, type TabStripGroup } from "./TabStrip";
 import TerminalTemplateMenu from "./TerminalTemplateMenu";
 import { Terminal } from "./Terminal";
@@ -90,6 +91,7 @@ export default function TerminalTabs({
 	profileId,
 	cwd,
 }: TerminalTabsProps) {
+	const defaultShell = useTerminalSettingsStore((s) => s.defaultShell);
 	const { tabs, activeTabId } = useTerminalStore(
 		useShallow((state) => state.profiles[profileId] ?? EMPTY_TERMINAL_PROFILE),
 	);
@@ -257,6 +259,7 @@ export default function TerminalTabs({
 							profileId={profileId}
 							sessionId={tab.id}
 							isActive={tab.id === activeTabId && !fileTabActive}
+							shell={defaultShell}
 						/>
 					</Box>
 				))}
